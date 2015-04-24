@@ -12,6 +12,7 @@ using namespace cv;
 
 int **HarrisCorner( Mat image );
 void GaussianFilter( Mat image, Mat &result, int window_size, float theta );
+float Gradient( Mat &image, int x, int y, char var, int window_size );
 
 int width, height;
 
@@ -22,20 +23,21 @@ int main( int argc, char **argv)
 	// opencv3 change: CV_RGB2GRAY => COLOR_RGB2GRAY
 	cvtColor( image, gray, COLOR_BGR2GRAY );
 	GaussianFilter( gray, gua, 5, 3);
-	//cout << format(gua,"C") << endl << endl;
-	//cout << "gray: " << gray.rows << " " << gray.cols << endl;
-	//cout << "gua: " << gua.rows << " " << gua.cols << endl;
 
-/*	
-	for( int i=0 ; i < gua.rows ; i++ )
+/*
+	Mat C = (Mat_<uchar>(5,5) << 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
+	for( int i=0 ; i < C.rows ; i++ )
 	{
-		for( int j=0 ; j < gua.cols ; j++ )
+		for( int j=0 ; j < C.cols ; j++ )
 		{
-			cout << (int)gua.data[i*gua.rows+j] << " ";
+			cout << (int)C.data[i*C.cols+j] << " ";
 		}
 		cout << endl;
 	}
+	float diff = Gradient( C, 3, 3, 'x', 3 );	
+	cout << diff << endl;
 */
+
 	namedWindow( "Display Image", WINDOW_AUTOSIZE );
 	imshow( "Display Image", gua );
 
@@ -48,6 +50,27 @@ int **HarrisCorner( Mat image )
 {
 }
 
+// passing pixel on the edge will cause problem
+float Gradient( Mat &image, int x, int y, char var, int window_size )
+{
+	int width = image.cols;
+	int height = image.rows;
+	int half_ksize = window_size / 2;
+	float tmp, sum = 0;
+	
+	for( int i = -half_ksize ; i <= half_ksize ; i++ )
+	{
+		for( int j = -half_ksize ; j <= half_ksize ; j++ )
+		{
+			if( var=='x' )
+				tmp = j;
+			else if( var=='y' )
+				tmp = i;
+			sum += tmp * (float)image.data[ (y+i)*width + x+j ];
+		}
+	}
+	return sum;
+}
 
 void GaussianFilter( Mat image, Mat &result, int window_size, float theta )
 {
@@ -71,7 +94,7 @@ void GaussianFilter( Mat image, Mat &result, int window_size, float theta )
 	for( int i=0 ; i < window_size ; i++ )
 		for( int j=0 ; j < window_size ; j++ )
 			filter[i][j] = filter[i][j] / sum;
-	
+
 	result.create( image.size(), image.type() );
 
 	// do convolution
@@ -90,4 +113,5 @@ void GaussianFilter( Mat image, Mat &result, int window_size, float theta )
 			result.data[ i*width + j ] = (uchar)sum;
 		}
 	}
+	free(filter);
 }
