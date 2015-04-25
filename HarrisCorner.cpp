@@ -11,35 +11,51 @@ using namespace cv;
 #define PI 3.1415926
 
 int **HarrisCorner( Mat image );
-void GaussianFilter( Mat image, Mat &result, int window_size, float theta );
-float Gradient( Mat &image, int x, int y, char var, int window_size );
+void Convolution( Mat image, Mat &result, float ***filter, int window_size );
+void GaussianFilter( float ***filter,  int window_size, float theta );
+void Gradient( float ***filter_in, float ***filter_out, char var, int window_size );
+void FindM( Mat &image, Mat &M, int x, int y, int window_size );
 
 int width, height;
 
 int main( int argc, char **argv)
 {
 	Mat image = imread( argv[1], 1 );
-	Mat gray, gua;
+	Mat gray, gaus;
+	Mat result_x, result_y;
+	float **filter_gaus, **filter_x, **filter_y;
+	
 	// opencv3 change: CV_RGB2GRAY => COLOR_RGB2GRAY
 	cvtColor( image, gray, COLOR_BGR2GRAY );
-	GaussianFilter( gray, gua, 5, 3);
+	
+	GaussianFilter( &filter_gaus, 5, 1 );
+	Gradient( &filter_gaus, &filter_x, 'x', 5 );
+	Gradient( &filter_gaus, &filter_y, 'y', 5 );
+	Convolution( gray, gaus, &filter_gaus, 5 );
+	Convolution( gaus, result_x, &filter_x, 5 );
+	Convolution( gaus, result_y, &filter_y, 5 );
 
+	free(filter_gaus);
+	free(filter_x);
+	free(filter_y);
 /*
-	Mat C = (Mat_<uchar>(5,5) << 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
-	for( int i=0 ; i < C.rows ; i++ )
-	{
-		for( int j=0 ; j < C.cols ; j++ )
-		{
-			cout << (int)C.data[i*C.cols+j] << " ";
-		}
-		cout << endl;
-	}
-	float diff = Gradient( C, 3, 3, 'x', 3 );	
-	cout << diff << endl;
+	Mat grad_x, grad_y;
+	Mat abs_grad_x, abs_grad_y;
+	
+	int scale = 1;
+	int delta = 0;
+	int ddepth = CV_16S;
+	
+	Sobel( gaus, grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT );
+	convertScaleAbs( grad_x, abs_grad_x );
+
+	Sobel( gaus, grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT );
+	convertScaleAbs( grad_y, abs_grad_y );
 */
 
+
 	namedWindow( "Display Image", WINDOW_AUTOSIZE );
-	imshow( "Display Image", gua );
+	imshow( "Display Image", gaus );
 
 	waitKey(0);
 	image.release();
@@ -51,52 +67,62 @@ int **HarrisCorner( Mat image )
 }
 
 // passing pixel on the edge will cause problem
-float Gradient( Mat &image, int x, int y, char var, int window_size )
+void FindM( Mat &image, Mat &M, int x, int y, int window_size )
 {
-	int width = image.cols;
-	int height = image.rows;
+	//float Ix = Gradient( image, x, y, 'x', window_size );
+	//float Iy = Gradient( image, x, y, 'y', window_size );
+	//cout << "[ " << Ix*Ix << " " << Ix*Iy << " ]" << endl;
+	//cout << "[ " << Ix*Iy << " " << Iy*Iy << " ]" << endl;
+	//M = ( Mat_<uchar>(2,2) << Ix*Ix, Ix*Iy, Ix*Iy, Iy*Iy );
+}
+
+// do gradient on a filter
+void Gradient( float ***filter_in, float ***filter_out, char var, int window_size )
+{
 	int half_ksize = window_size / 2;
 	float tmp, sum = 0;
+	*filter_out = (float**)malloc( sizeof(float*) * window_size );
 	
 	for( int i = -half_ksize ; i <= half_ksize ; i++ )
 	{
+		(*filter_out)[i+half_ksize] = (float*)malloc( sizeof(float) * window_size );
 		for( int j = -half_ksize ; j <= half_ksize ; j++ )
 		{
 			if( var=='x' )
-				tmp = j;
+				(*filter_out)[i+half_ksize][j+half_ksize] = (*filter_in)[i+half_ksize][j+half_ksize] * j;
 			else if( var=='y' )
-				tmp = i;
-			sum += tmp * (float)image.data[ (y+i)*width + x+j ];
+				(*filter_out)[i+half_ksize][j+half_ksize] = (*filter_in)[i+half_ksize][j+half_ksize] * i;
 		}
 	}
-	return sum;
 }
 
-void GaussianFilter( Mat image, Mat &result, int window_size, float theta )
+// set up Gaussian filter
+void GaussianFilter( float ***filter,  int window_size, float theta )
 {
-	int width = image.cols;
-	int height = image.rows;
 	int half_ksize = window_size / 2;
-
-	// set up Gaussian filter
-	float **filter = (float**)malloc( sizeof(float*) * window_size );
 	float tmp, sum = 0;
+	*filter = (float**)malloc( sizeof(float*) * window_size ); /* *filter points to a 2D array */
 	for( int i = -half_ksize ; i <= half_ksize ; i++ )
 	{
-		filter[i+half_ksize] = (float*)malloc( sizeof(float) * window_size );
+		(*filter)[i+half_ksize] = (float*)malloc( sizeof(float) * window_size ); /* the parenthesis outer *filter are needed  */
 		for( int j = -half_ksize ; j <= half_ksize ; j++ )
 		{
 			tmp = exp( -1*(pow(i,2)+pow(j,2) ) / (2*pow(theta,2)) );
-			filter[i+half_ksize][j+half_ksize] = tmp;
+			(*filter)[i+half_ksize][j+half_ksize] = tmp;
 			sum += tmp;
 		}
 	}
 	for( int i=0 ; i < window_size ; i++ )
 		for( int j=0 ; j < window_size ; j++ )
-			filter[i][j] = filter[i][j] / sum;
+			(*filter)[i][j] = (*filter)[i][j] / sum;
+}
 
+void Convolution( Mat image, Mat &result, float ***filter, int window_size )
+{
+	int width = image.cols;
+	int height = image.rows;
+	int half_ksize = window_size / 2;
 	result.create( image.size(), image.type() );
-
 	// do convolution
 	for( int i = half_ksize ; i < height - half_ksize ; i++ )
 	{
@@ -107,11 +133,11 @@ void GaussianFilter( Mat image, Mat &result, int window_size, float theta )
 			{
 				for( int x = -half_ksize ; x <= half_ksize ; x++ )
 				{
-					sum += (float)image.data[ (i+y)*width + j+x ] * filter[y+half_ksize][x+half_ksize];
+					sum += (float)image.data[ (i+y)*width + j+x ] * (*filter)[y+half_ksize][x+half_ksize];
 				}
 			}
-			result.data[ i*width + j ] = (uchar)sum;
+//	cout << "gaus filter: ( " << i << ", " << j << " )" << endl;
+			result.data[ i*width + j ] = sum;
 		}
 	}
-	free(filter);
 }
