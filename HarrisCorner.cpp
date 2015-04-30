@@ -12,13 +12,47 @@ using namespace cv;
 #define PI 3.1415926
 #define WIN_SIZE 3
 
+void HarrisCorner( Mat &image );
 void ConvertMat( Mat src, Mat &dst );
 void PrintMat( Mat &m );
 void GrayScale( Mat image, Mat &gray );
 void Convolution( Mat image, Mat &result, float ***filter, int window_size );
 void GaussianFilter( float ***filter,  int window_size, float theta );
 void Gradient( float ***filter_in, float ***filter_out, char var, int window_size );
-void FindM( Mat &image, Mat &M, int x, int y, int window_size );
+void FindCorners( Mat &R, vector<Point> &corner_list, float th, int window_size );
+
+void HarrisCorner( Mat &image )
+{	
+	Mat rgb, gray, gray2, gaus;
+	Mat result_x, result_y;
+	Mat Ixx, Iyy, Ixy;
+	Mat detM, trM, R;
+	Mat draw;
+	float **filter_gaus, **filter_x, **filter_y;
+	float k;
+
+	/* turn rgb to intensity */
+	/* opencv3 change: CV_RGB2GRAY => COLOR_RGB2GRAY */
+	//cvtColor( image, gray, COLOR_BGR2GRAY );
+	GrayScale( image, gray );
+	
+	GaussianFilter( &filter_gaus, WIN_SIZE, 1 );
+	Gradient( &filter_gaus, &filter_x, 'x', WIN_SIZE );
+	Gradient( &filter_gaus, &filter_y, 'y', WIN_SIZE );
+	
+	Convolution( gray, gaus, &filter_gaus, WIN_SIZE );
+	Convolution( gaus, result_x, &filter_x, WIN_SIZE );
+	Convolution( gaus, result_y, &filter_y, WIN_SIZE );
+
+	Ixx = result_x.mul(result_x);
+	Iyy = result_y.mul(result_y);
+	Ixy = result_x.mul(result_y);
+
+	detM = Ixx.mul(Iyy) - Ixy.mul(Ixy);
+	trM = Ixx + Iyy;
+	k = 0.05;
+	R = detM - k * trM.mul(trM);
+}
 
 void ConvertMat( Mat src, Mat &dst )
 {
@@ -73,16 +107,6 @@ void GrayScale( Mat image, Mat &gray )
 			gray.at<float>(i,j) = sum;
 		}
 	}
-}
-
-/* passing pixel on the edge will cause problem */
-void FindM( Mat &image, Mat &M, int x, int y, int window_size )
-{
-	//float Ix = Gradient( image, x, y, 'x', window_size );
-	//float Iy = Gradient( image, x, y, 'y', window_size );
-	//cout << "[ " << Ix*Ix << " " << Ix*Iy << " ]" << endl;
-	//cout << "[ " << Ix*Iy << " " << Iy*Iy << " ]" << endl;
-	//M = ( Mat_<uchar>(2,2) << Ix*Ix, Ix*Iy, Ix*Iy, Iy*Iy );
 }
 
 /* do gradient on a filter */
@@ -164,6 +188,22 @@ void Convolution( Mat image, Mat &result, float ***filter, int window_size )
 				result.at<float>(i,j) = sum;
 			}
 
+		}
+	}
+}
+
+void FindCorners( Mat &R, vector<Point> &corner_list, float th, int window_size )
+{
+	int col = R.cols;
+	int row = R.rows;
+	int half_ksize = window_size / 2;
+	
+	for( int i = half_ksize ; i < row - half_ksize ; i++ )
+	{
+		for( int j = half_ksize ; j < col - half_ksize ; j++ )
+		{
+			if( R.at<float>(i,j) >= th )
+				corner_list.push_back(Point(i,j));
 		}
 	}
 }
