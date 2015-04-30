@@ -140,31 +140,30 @@ void Convolution( Mat image, Mat &result, float ***filter, int window_size )
 	{
 		for( int j = 0 ; j < col ; j++ )
 		{
+			result.at<float>(i,j) = image.at<float>(i,j);
 			int up = -half_ksize, down = half_ksize;
 			int left = -half_ksize, right = half_ksize;
 			float sum = 0, de = 0;
 
-			if( i < half_ksize ) up = -i;
-			if( i > row - half_ksize ) down = row - i - 1;
-			if( j < half_ksize ) left = -j;
-			if( j > col - half_ksize ) right = col -j - 1;
+			//if( i < half_ksize ) up = -i;
+			//if( i > row - half_ksize ) down = row - i - 1;
+			//if( j < half_ksize ) left = -j;
+			//if( j > col - half_ksize ) right = col -j - 1;
 
-			for( int y = up ; y <= down ; y++ )
+			if( i >= half_ksize && i < row-half_ksize && j >= half_ksize & i < col-half_ksize )
 			{
-				for( int x = left ; x <= right ; x++ )
+
+				for( int y = up ; y <= down ; y++ )
 				{
-					de += (*filter)[y+half_ksize][x+half_ksize];
-					sum += image.at<float>(i+y,j+x) * (*filter)[y+half_ksize][x+half_ksize];
+					for( int x = left ; x <= right ; x++ )
+					{
+						de += (*filter)[y+half_ksize][x+half_ksize];
+						sum += image.at<float>(i+y,j+x) * (*filter)[y+half_ksize][x+half_ksize];
+					}
 				}
+				result.at<float>(i,j) = sum;
 			}
-			result.at<float>(i,j) = sum/de;
-			//result.data[ i*result.step[0] + j*result.step[1] ] = sum;// / de;
-			//cout << (float)result.data[i*result.step[0] + j*result.step[1] ]<< " ";
-			//cout << sum << " ";
-			if(max<sum)
-				max=sum;
+
 		}
-		//cout << endl;
 	}
-	cout << "MAX= " << max << endl;
 }
