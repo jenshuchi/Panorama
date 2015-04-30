@@ -10,7 +10,7 @@ using namespace std;
 using namespace cv;
 
 #define PI 3.1415926
-#define WIN_SIZE 5
+#define WIN_SIZE 3
 
 void ConvertMat( Mat src, Mat &dst );
 void PrintMat( Mat &m );
@@ -20,106 +20,22 @@ void GaussianFilter( float ***filter,  int window_size, float theta );
 void Gradient( float ***filter_in, float ***filter_out, char var, int window_size );
 void FindM( Mat &image, Mat &M, int x, int y, int window_size );
 
-int width, height;
-
-int main( int argc, char **argv)
-{
-	Mat image = imread( argv[1], 1 );
-	Mat gray, gray2, gaus;
-	Mat result_x, result_y;
-	Mat draw;
-	float **filter_gaus, **filter_x, **filter_y;
-
-	GrayScale( image, gray );
-	
-	// ?????
-	//cout << image.size[0] << " " << image.size[1] << " " << image.size[2]  << " " << gray.size[0] << " " << gray.size[1] << endl;
-	
-	/* opencv3 change: CV_RGB2GRAY => COLOR_RGB2GRAY */
-	//cvtColor( image, gray, COLOR_BGR2GRAY );
-	
-	/* print filter
-	for(int i=0;i<WIN_SIZE;i++){
-		for(int j=0;j<WIN_SIZE;j++)
-			cout << filter_gaus[i][j] << " ";
-		cout << endl;
-	}
-	*/
-	GaussianFilter( &filter_gaus, WIN_SIZE, 1 );
-	
-	Gradient( &filter_gaus, &filter_x, 'x', WIN_SIZE );
-	Gradient( &filter_gaus, &filter_y, 'y', WIN_SIZE );
-	
-	Convolution( gray, gaus, &filter_gaus, WIN_SIZE );
-	Convolution( gaus, result_x, &filter_x, WIN_SIZE );
-	Convolution( gaus, result_y, &filter_y, WIN_SIZE );
-
-	Mat Ixx = result_x.mul(result_x);
-	Mat Iyy = result_y.mul(result_y);
-	Mat Ixy = result_x.mul(result_y);
-
-	Mat detM = Ixx.mul(Iyy) - Ixy.mul(Ixy);
-	Mat trM = Ixx + Iyy;
-	float k = 0.05;
-	Mat R = detM - k * trM.mul(trM);
-	/* print matrix */
-	//PrintMat(gray);
-
-	//cout << image.type() << endl;
-	//cout << gray.type() << endl;
-	//cout << gaus.type() << endl;
-	//cout << result_x.type() << endl;
-
-	free(filter_gaus);
-	free(filter_x);
-	free(filter_y);
-	
-	/* opencv gradient test */
-	/*
-	Mat grad_x, grad_y;
-	Mat abs_grad_x, abs_grad_y;
-	
-	int scale = 1;
-	int delta = 0;
-	int ddepth = CV_16S;
-	
-	Sobel( gaus, grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT );
-	convertScaleAbs( grad_x, abs_grad_x );
-
-	Sobel( gaus, grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT );
-	convertScaleAbs( grad_y, abs_grad_y );
-	*/
-	
-	//PrintMat(gray);	
-	/* cannot use opencv convertTo() successfully, so write another ConvertMat() */
-	/*
-	double minVal, maxVal;
-	minMaxLoc(gray, &minVal, &maxVal);
-	gray.convertTo(draw, CV_8U);
-	*/
-	ConvertMat( result_x, draw );
-	PrintMat(result_x);	
-
-	namedWindow( "Display Image", WINDOW_AUTOSIZE );
-	imshow( "Display Image", draw);
-
-	waitKey(0);
-	image.release();
-	return 0;
-}
-
-//void ImageF2C()
-//{
-//}
-
 void ConvertMat( Mat src, Mat &dst )
 {
-	dst.create( src.size(), CV_8U );
+	double min_d, max_d;
+	minMaxLoc( src, &min_d, &max_d );
+	float min = (float)min_d;
+	float range = (float)( max_d - min_d );
+
+	dst.create( src.size(), CV_8UC1 );
+	
 	for( int i=0 ; i < src.rows ; i++ )
 	{
 		for( int j=0 ; j < src.cols ; j++ )
 		{
-			dst.data[i*dst.step[0] + j*dst.step[1]] = (uchar)src.data[i*src.step[0] + j*src.step[1]];
+			float tmp = src.at<float>(i,j);
+			int tmp2 = (int)tmp;
+			dst.at<uchar>(i,j) = (uchar)tmp2;
 		}
 	}
 }
@@ -133,28 +49,28 @@ void PrintMat( Mat &m )
 	{
 		for( int j=0 ; j < col ; j++ )
 		{
-			cout << (float)m.data[ i*m.step[0]+j*m.step[1] ] << " ";
+			cout << (int)m.data[ i*m.step[0]+j*m.step[1] ] << " ";
 		}
 		cout << endl;
 	}
 }
 
-/* compute the intensity of image */
+/* compute the intensity of image, and turn the type to float */
 void GrayScale( Mat image, Mat &gray )
 {
 	float sum;
-
+	
 	gray.create( image.rows, image.cols, CV_32FC1 );
 
 	for( int i=0 ; i < image.rows ; i++ )
 	{
 		for( int j=0 ; j < image.cols ; j++ )
 		{	
-			sum  = 0.299 * (float)image.data[ i*image.step[0] + j*image.step[1] + 0*image.step[0] ];
-			sum += 0.587 * (float)image.data[ i*image.step[0] + j*image.step[1] + 0*image.step[1] ];
-			sum += 0.114 * (float)image.data[ i*image.step[0] + j*image.step[1] + 0*image.step[2] ];
-			gray.data[ i*gray.step[0] + j*gray.step[1] ] = sum;
-			//cout << sum << endl;
+			Vec3b rgb = image.at<Vec3b>(i,j);
+			sum  = 0.299 * rgb[0];
+			sum += 0.587 * rgb[1];
+			sum += 0.114 * rgb[2];
+			gray.at<float>(i,j) = sum;
 		}
 	}
 }
@@ -182,9 +98,9 @@ void Gradient( float ***filter_in, float ***filter_out, char var, int window_siz
 		for( int j = -half_ksize ; j <= half_ksize ; j++ )
 		{
 			if( var=='x' )
-				(*filter_out)[i+half_ksize][j+half_ksize] = (*filter_in)[i+half_ksize][j+half_ksize] * j;
+				(*filter_out)[i+half_ksize][j+half_ksize] = j * 1;//(*filter_in)[i+half_ksize][j+half_ksize];
 			else if( var=='y' )
-				(*filter_out)[i+half_ksize][j+half_ksize] = (*filter_in)[i+half_ksize][j+half_ksize] * i;
+				(*filter_out)[i+half_ksize][j+half_ksize] = i * 1;//(*filter_in)[i+half_ksize][j+half_ksize];
 		}
 	}
 }
@@ -216,8 +132,9 @@ void Convolution( Mat image, Mat &result, float ***filter, int window_size )
 	int col = image.cols;
 	int row = image.rows;
 	int half_ksize = window_size / 2;
+	float max =0;
 
-	result.create( image.size(), image.type() );
+	result.create( image.size(), CV_32FC1 );
 
 	for( int i = 0 ; i < row ; i++ )
 	{
@@ -225,24 +142,29 @@ void Convolution( Mat image, Mat &result, float ***filter, int window_size )
 		{
 			int up = -half_ksize, down = half_ksize;
 			int left = -half_ksize, right = half_ksize;
-			float sum = 0;
-			float de = 0;
+			float sum = 0, de = 0;
 
 			if( i < half_ksize ) up = -i;
 			if( i > row - half_ksize ) down = row - i - 1;
 			if( j < half_ksize ) left = -j;
-			if( j > col -half_ksize ) right = col -j -1;
+			if( j > col - half_ksize ) right = col -j - 1;
 
 			for( int y = up ; y <= down ; y++ )
 			{
 				for( int x = left ; x <= right ; x++ )
 				{
 					de += (*filter)[y+half_ksize][x+half_ksize];
-					sum += (float)image.data[ (i+y)*image.step[0] + (j+x)*image.step[1] ] * (*filter)[y+half_ksize][x+half_ksize];
+					sum += image.at<float>(i+y,j+x) * (*filter)[y+half_ksize][x+half_ksize];
 				}
 			}
-			result.data[ i*result.step[0] + j*result.step[1] ] = sum;// / de;
-			//cout << sum / de << endl;
+			result.at<float>(i,j) = sum/de;
+			//result.data[ i*result.step[0] + j*result.step[1] ] = sum;// / de;
+			//cout << (float)result.data[i*result.step[0] + j*result.step[1] ]<< " ";
+			//cout << sum << " ";
+			if(max<sum)
+				max=sum;
 		}
+		//cout << endl;
 	}
+	cout << "MAX= " << max << endl;
 }
