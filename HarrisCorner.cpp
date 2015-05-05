@@ -22,22 +22,26 @@ void PrintFilter( double ***filter, int window_size );
 //void ConvertMat( Mat src, Mat &dst );
 //void PrintMat( Mat &m );
 
-void HarrisCorner( Mat &image )
+void HarrisCorner( string file_name )
 {	
+	Mat image = imread( file_name, 1 );
 	Mat rgb, gray, gray2, gaus;
 	Mat result_x, result_y;
-	Mat Ixx, Iyy, Ixy;
+	Mat Ixx, Ixy, Iyy;
+	Mat Sxx, Sxy, Syy;
 	Mat detM, trM, R;
 	Mat draw;
-	double **filter_gaus, **filter_x, **filter_y;
-	double k;
-
-	/* turn rgb to intensity */
-	/* opencv3 change: CV_RGB2GRAY => COLOR_RGB2GRAY */
-	//cvtColor( image, gray, COLOR_BGR2GRAY );
-	GrayScale( image, gray );
+	double **filter_gaus, **filter_gaus2, **filter_x, **filter_y;
+	double k = 0.04;
+	vector<Point> corner_list;
 	
-	GaussianFilter( &filter_gaus, WIN_SIZE, 1 );
+	GrayScale( image, gray );
+	//cvtColor( image, rgb, COLOR_BGR2GRAY );
+	//rgb.convertTo(gray,CV_64FC1);
+
+
+	GaussianFilter( &filter_gaus, WIN_SIZE, 0.84089642 );
+	GaussianFilter( &filter_gaus2, WIN_SIZE, 3 );
 	Gradient( &filter_gaus, &filter_x, 'x', WIN_SIZE );
 	Gradient( &filter_gaus, &filter_y, 'y', WIN_SIZE );
 	
@@ -48,11 +52,33 @@ void HarrisCorner( Mat &image )
 	Ixx = result_x.mul(result_x);
 	Iyy = result_y.mul(result_y);
 	Ixy = result_x.mul(result_y);
+	
+	Convolution( Ixx, Sxx, &filter_gaus2, WIN_SIZE );
+	Convolution( Ixy, Sxy, &filter_gaus2, WIN_SIZE );
+	Convolution( Iyy, Syy, &filter_gaus2, WIN_SIZE );
 
-	detM = Ixx.mul(Iyy) - Ixy.mul(Ixy);
-	trM = Ixx + Iyy;
-	k = 0.05;
+	detM = Sxx.mul(Syy) - Sxy.mul(Sxy);
+	trM = Sxx + Syy;
 	R = detM - k * trM.mul(trM);
+/*
+	double minVal, maxVal;
+	Point minLoc, maxLoc;
+	minMaxLoc(tmpM, &minVal, &maxVal, &minLoc, &maxLoc);
+	//tmpM = tmpM - (double)minVal;//369.745;
+	tmpM.convertTo( draw, CV_8U);//, 255.0/(maxVal-minVal),0);// -minVal*(maxVal-minVal) );
+*/
+	draw = image;
+	FindCorners( R, corner_list, 500000000, WIN_SIZE );
+	cout << corner_list.size() << " / " << draw.rows*draw.cols << endl;
+	for( int i=0 ; i < corner_list.size() ; i++ )
+	{
+		circle( draw, corner_list[i], 1, Scalar( 0, 0, 255 ), 1, 2 );
+	}
+
+	namedWindow( "Display Image", WINDOW_NORMAL );
+	imshow( "Display Image", draw);
+
+	waitKey(0);
 }
 /* compute the intensity of image, and turn the type to double */
 void GrayScale( Mat image, Mat &gray )
