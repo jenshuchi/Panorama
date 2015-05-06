@@ -11,19 +11,95 @@ using namespace std;
 using namespace cv;
 
 #define PI 3.1415926
-#define WIN_SIZE 7
+#define WIN_SIZE 3
+#define MIN_CORNERS 300
 
-void CornerDetection( Mat &image, vector<Point> &corner_list );
+typedef pair<Point,double> Pix;
+
+typedef struct{
+	Point position;
+	double description[9];
+} Feature;
+
+int *TwoImageMatching( vector< Feature> &ftrs_1, vector<Feature> &ftrs_2 );
+void CornerDescriptor( Mat &intensity, vector<Pix> &corner_list, vector<Feature> &ftrs, int feature_size );
+void CornerDetection( Mat &image, Mat &intensity, vector<Pix> &corner_list );
 void GrayScale( Mat image, Mat &gray );
 void Convolution( Mat image, Mat &result, double ***filter, int window_size );
 void GaussianFilter( double ***filter,  int window_size, double theta );
 void Gradient( double ***filter_in, double ***filter_out, char var, int window_size );
-void FindCorners( Mat &R, vector<Point> &corner_list, double th, int window_size );
+void FindCorners( Mat &R, vector<Pix> &corner_list, double th, int window_size );
 void PrintFilter( double ***filter, int window_size );
+void NonMaxSuppression( Mat &R, vector<Pix> &corner_list );
+bool corner_compare( Pix p, Pix q );
 //void ConvertMat( Mat src, Mat &dst );
 //void PrintMat( Mat &m );
+/*
+double *TwoAlignment()
+{
+	double *M = malloc( sizeof(double)*4 );
+}
+*/
 
-void CornerDetection( Mat &image, vector<Point> &corner_list )
+int *TwoImageMatching( vector< Feature> &ftrs_1, vector<Feature> &ftrs_2 )
+{
+	double nearest_value, second_value;
+	int nearest_index, second_index;
+	int *match_list_1 = new int[ftrs_1.size()];//malloc( sizeof(int)*ftrs_1.size() );
+	int *match_list_2 = new int[ftrs_2.size()];//malloc( sizeof(int)*ftrs_2.size() );
+
+	//memset( match_list_1, -1, ftrs_1.size() );
+	//memset( match_list_2, -1, ftrs_2.size() );
+
+	for( int i=0 ; i < ftrs_1.size() ; i++ )
+		match_list_1[i] = -1;
+	for( int i=0 ; i < ftrs_2.size() ; i++ )
+		match_list_2[i] = -1;
+
+	nearest_value = 0;
+	seconde_value = 0;
+	nearest_index = -1;
+	second_index = -1;
+
+	for( int i=0 ; i < ftrs_1.size() ; i++ )
+	{
+		for( int j=0 ; j < ftrs_2.size() ; j++ )
+		{
+		}
+	}
+	
+	return match_list_1;
+}
+
+void CornerDescriptor( Mat &intensity, vector<Pix> &corner_list, vector<Feature> &ftrs, int feature_size )
+{
+	int half_fsize = feature_size / 2;
+	int mid = feature_size * feature_size / 2;
+
+	for( int i=0 ; i < corner_list.size() ; i++ )
+	{
+		Feature f;
+		Pix tmp_ftr = corner_list[i];
+		f.position = corner_list[i].first;
+		for( int x = -half_fsize ; x <= half_fsize ; x++ )
+		{
+			for( int y = -half_fsize ; y <= half_fsize ; y++ )
+			{
+				f.description[ mid+x+y ] = intensity.at<double>( tmp_ftr.first.y + y, tmp_ftr.first.x + x );
+			}
+		}
+		ftrs.push_back(f);
+		/*
+		cout << tmp_ftr.first << " ~~~~~~ ";
+		cout <<  ftrs[i].position << " = [ ";
+		for( int j=0 ; j < 9 ; j++ )
+			cout << ftrs[i].description[j] << ", ";
+		cout << "]" << endl;
+		*/
+	}
+}
+
+void CornerDetection( Mat &image, Mat &intensity, vector<Pix> &corner_list )
 {	
 	Mat rgb, gray, gray2, gaus;
 	Mat result_x, result_y;
@@ -39,7 +115,7 @@ void CornerDetection( Mat &image, vector<Point> &corner_list )
 	//rgb.convertTo(gray,CV_64FC1);
 
 
-	GaussianFilter( &filter_gaus, WIN_SIZE, 0.84089642 );
+	GaussianFilter( &filter_gaus, WIN_SIZE, 1 );
 	GaussianFilter( &filter_gaus2, WIN_SIZE, 3 );
 	Gradient( &filter_gaus, &filter_x, 'x', WIN_SIZE );
 	Gradient( &filter_gaus, &filter_y, 'y', WIN_SIZE );
@@ -47,6 +123,8 @@ void CornerDetection( Mat &image, vector<Point> &corner_list )
 	Convolution( gray, gaus, &filter_gaus, WIN_SIZE );
 	Convolution( gaus, result_x, &filter_x, WIN_SIZE );
 	Convolution( gaus, result_y, &filter_y, WIN_SIZE );
+
+	intensity = gaus;
 
 	Ixx = result_x.mul(result_x);
 	Iyy = result_y.mul(result_y);
@@ -180,7 +258,7 @@ void Convolution( Mat image, Mat &result, double ***filter, int window_size )
 	}
 }
 
-void FindCorners( Mat &R, vector<Point> &corner_list, double th, int window_size )
+void FindCorners( Mat &R, vector<Pix> &corner_list, double th, int window_size )
 {
 	int col = R.cols;
 	int row = R.rows;
@@ -191,7 +269,7 @@ void FindCorners( Mat &R, vector<Point> &corner_list, double th, int window_size
 		for( int j = half_ksize ; j < col - half_ksize ; )
 		{
 			if( R.at<double>(i,j) >= th )
-				corner_list.push_back(Point(j,i)); /* Point("j","i") for opencv "circle" to draw circle... */
+				corner_list.push_back( make_pair( Point(j,i), R.at<double>(i,j) ) ); /* Point("j","i") for opencv "circle" to draw circle... */
 			j += half_ksize;
 		}
 		i += half_ksize;
@@ -210,48 +288,83 @@ void PrintFilter( double ***filter, int window_size )
 	}
 }
 
-void NonMaxSuppression( Mat &R, vector<Point> &corner_list )
+
+void NonMaxSuppression( Mat &R, vector<Pix> &corner_list )
 {
+	int r= 3;
+	vector<Pix> tmp_list;
+
 	sort( corner_list.begin(), corner_list.end(), corner_compare );
+
+	while( corner_list.size() > MIN_CORNERS )
+	{
+		tmp_list.clear();
+
+		for( int i=0 ; i < corner_list.size()-1 ; i++ )
+		{
+			int x_i = corner_list[i].first.x;
+			int y_i = corner_list[i].first.y;
+
+			for( int j=i+1 ; j < corner_list.size() ; j++ )
+			{
+				int x_j = corner_list[j].first.x;
+				int y_j = corner_list[j].first.y;
+				double distance = sqrt( pow(x_i-x_j,2) + pow(y_i-y_j,2) );
+				if( distance < r )
+				{
+					tmp_list.push_back( corner_list[j] );
+					corner_list.erase( corner_list.begin() + j );
+				}
+			}
+		}
+		r += 1;
+	}
+	if( corner_list.size() < MIN_CORNERS && corner_list.size()+tmp_list.size() < MIN_CORNERS + 100 )
+	{
+		for( int i=0 ; i < tmp_list.size() ; i++ )
+			corner_list.push_back( tmp_list[i] );
+	}
 }
 
-bool corner_compare( Point p, Point q )
+bool corner_compare( Pix p, Pix q )
 {
+	return p.second > q.second;
 }
+
 
 /*
-void ConvertMat( Mat src, Mat &dst )
-{
-	double min_d, max_d;
-	minMaxLoc( src, &min_d, &max_d );
-	double min = (double)min_d;
-	double range = (double)( max_d - min_d );
+   void ConvertMat( Mat src, Mat &dst )
+   {
+   double min_d, max_d;
+   minMaxLoc( src, &min_d, &max_d );
+   double min = (double)min_d;
+   double range = (double)( max_d - min_d );
 
-	dst.create( src.size(), CV_8UC1 );
-	
-	for( int i=0 ; i < src.rows ; i++ )
-	{
-		for( int j=0 ; j < src.cols ; j++ )
-		{
-			double tmp = src.at<double>(i,j);
-			int tmp2 = (int)tmp;
-			dst.at<uchar>(i,j) = (uchar)tmp2;
-		}
-	}
-}
+   dst.create( src.size(), CV_8UC1 );
 
-void PrintMat( Mat &m )
-{
-	int row = m.rows;
-	int col = m.cols;
+   for( int i=0 ; i < src.rows ; i++ )
+   {
+   for( int j=0 ; j < src.cols ; j++ )
+   {
+   double tmp = src.at<double>(i,j);
+   int tmp2 = (int)tmp;
+   dst.at<uchar>(i,j) = (uchar)tmp2;
+   }
+   }
+   }
 
-	for( int i=0 ; i < row ; i++ )
-	{
-		for( int j=0 ; j < col ; j++ )
-		{
-			cout << (int)m.data[ i*m.step[0]+j*m.step[1] ] << " ";
-		}
-		cout << endl;
-	}
-}
-*/
+   void PrintMat( Mat &m )
+   {
+   int row = m.rows;
+   int col = m.cols;
+
+   for( int i=0 ; i < row ; i++ )
+   {
+   for( int j=0 ; j < col ; j++ )
+   {
+   cout << (int)m.data[ i*m.step[0]+j*m.step[1] ] << " ";
+   }
+   cout << endl;
+   }
+   }
+ */
